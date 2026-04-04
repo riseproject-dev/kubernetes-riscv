@@ -1381,7 +1381,7 @@ done`}
 
 	framework.It("should create Workload and PodGroup for gang-eligible Job",
 		framework.WithFeatureGate(features.GenericWorkload),
-		framework.WithFeatureGate(features.EnableWorkloadWithJob),
+		framework.WithFeatureGate(features.WorkloadWithJob),
 		func(ctx context.Context) {
 			parallelism := int32(4)
 			completions := int32(4)

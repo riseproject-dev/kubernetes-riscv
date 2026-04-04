@@ -349,7 +349,7 @@ const (
 	//
 	// Enables the Job controller to automatically create Workload and PodGroup
 	// objects for Jobs that qualify for gang scheduling.
-	EnableWorkloadWithJob featuregate.Feature = "EnableWorkloadWithJob"
+	WorkloadWithJob featuregate.Feature = "WorkloadWithJob"
 
 	// owner: @HirazawaUi
 	// kep: http://kep.k8s.io/3721
@@ -1448,7 +1448,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 		// TODO (https://github.com/kubernetes/kubernetes/issues/134459): remove completely in 1.38
 	},
 
-	EnableWorkloadWithJob: {
+	WorkloadWithJob: {
 		{Version: version.MustParse("1.36"), Default: false, PreRelease: featuregate.Alpha},
 	},
 
@@ -2470,7 +2470,7 @@ var defaultKubernetesFeatureGateDependencies = map[featuregate.Feature][]feature
 
 	DynamicResourceAllocation: {},
 
-	EnableWorkloadWithJob: {GenericWorkload},
+	WorkloadWithJob: {GenericWorkload},
 
 	EnvFiles: {},
 

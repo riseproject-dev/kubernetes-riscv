@@ -103,7 +103,7 @@ are restricted to Tier 3." Because riscv64 is a first-class Go port, it is
 This Tier 3 platform status is maintained by the RISE Project:
 
 - Ludovic Henry (@luhenry) -- RISE Project
-- Brian Harrington (@bharrington) -- RISE Project
+- Brian 'redbeard' Harrington (@brianredbeard) -- RISE Project
 
 As Tier 3 maintainers, we commit to:
 - Maintaining the documented build process and keeping it current with
@@ -126,6 +126,51 @@ As Tier 3 maintainers, we commit to:
 Per the policy, Tier 3 does not create obligations for the Kubernetes project.
 Bug reports or feature requests specific to riscv64 may be closed without
 action by upstream maintainers.
+
+### Issue Labels
+
+The Kubernetes project currently has no architecture-specific labels. OS-level
+labels exist (`area/os/ubuntu`, `area/os/fedora`, `area/os/coreos`) and
+platform labels exist for cloud providers (`area/platform/gce`, etc.), but
+there is no `area/arch/*` convention for CPU architectures.
+
+We propose establishing `area/arch/*` labels following the existing `area/*`
+naming convention. These labels would be created in `kubernetes/kubernetes`
+and in ecosystem repositories where architecture-specific issues arise
+(e.g., `kubernetes/test-infra`, `kubernetes/release`,
+`kubernetes/sig-release`):
+
+| Label | Description | Color |
+|-------|-------------|-------|
+| `area/arch/riscv64` | Issues or PRs related to linux/riscv64 platform support | `#0052cc` |
+| `area/arch/arm64` | Issues or PRs related to linux/arm64 platform support | `#0052cc` |
+| `area/arch/s390x` | Issues or PRs related to linux/s390x platform support | `#0052cc` |
+| `area/arch/ppc64le` | Issues or PRs related to linux/ppc64le platform support | `#0052cc` |
+
+The color `#0052cc` matches existing `area/*` labels. The full set is
+proposed rather than riscv64 alone because architecture labels benefit all
+platform maintainers equally -- s390x and ppc64le maintainers currently have
+no way to subscribe to issues affecting their platforms either.
+
+These labels serve several purposes:
+
+1. **Proactive monitoring**: Platform maintainers can watch for issues across
+   all Kubernetes repositories using a single label filter, rather than
+   relying on keyword searches or being manually tagged.
+2. **Triage routing**: When reporters file issues that manifest only on a
+   specific architecture, triagers can apply the label to route it to the
+   relevant maintainers without needing to know who they are.
+3. **Impact assessment**: Before releases, SIG Release can query open issues
+   by architecture label to assess platform health.
+4. **Prow automation**: Labels can be integrated with prow's label plugin
+   so that community members can apply them via `/area arch/riscv64` in
+   issue comments, consistent with how other `area/*` labels are applied.
+
+To create these labels, we would submit a PR to
+[`kubernetes/test-infra/label_sync/labels.yaml`](https://github.com/kubernetes/test-infra/blob/master/label_sync/labels.yaml)
+adding the `area/arch/*` entries to the default label set. This ensures
+the labels are synchronized across all Kubernetes GitHub repositories
+automatically.
 
 ### User Demand
 

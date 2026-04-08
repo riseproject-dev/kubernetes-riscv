@@ -22,37 +22,52 @@ The simplest approach. Builds on your existing x86_64 or arm64 workstation.
 ### Install the cross-compiler toolchain
 
 ```bash
-# Debian/Ubuntu
-sudo apt-get install gcc-riscv64-linux-gnu
+# Debian/Ubuntu (includes glibc headers for CGO)
+sudo apt-get install gcc-riscv64-linux-gnu libc6-dev-riscv64-cross
 
-# Fedora
+# Fedora (bare cross-compiler only; see CGO note below)
 sudo dnf install gcc-riscv64-linux-gnu
 ```
 
+> **Fedora note:** Fedora's `gcc-riscv64-linux-gnu` does not include glibc
+> headers (no `libc6-dev-riscv64-cross` equivalent). Binaries that need CGO
+> (kubelet) must be built statically or via the dockerized kube-cross method.
+
 ### Build all server binaries
 
+Use `make all` (not `make cross`) when targeting a specific set of binaries.
+`make cross` ignores `WHAT` and builds all targets for all platforms.
+
 ```bash
-KUBE_BUILD_PLATFORMS=linux/riscv64 make cross \
-  WHAT="cmd/kubelet cmd/kubeadm cmd/kubectl cmd/kube-apiserver \
+# Static binaries (no CGO sysroot needed)
+KUBE_BUILD_PLATFORMS=linux/riscv64 make all \
+  WHAT="cmd/kubectl cmd/kubeadm cmd/kube-apiserver \
         cmd/kube-controller-manager cmd/kube-scheduler cmd/kube-proxy"
+
+# kubelet without CGO (no seccomp support)
+KUBE_BUILD_PLATFORMS=linux/riscv64 KUBE_STATIC_OVERRIDES=kubelet \
+  make all WHAT="cmd/kubelet"
+
+# kubelet with CGO (requires glibc sysroot, e.g., on Debian/Ubuntu)
+KUBE_BUILD_PLATFORMS=linux/riscv64 make all WHAT="cmd/kubelet"
 ```
 
 ### Build specific binaries
 
 ```bash
-# Just kubelet and kubectl
-KUBE_BUILD_PLATFORMS=linux/riscv64 make cross \
-  WHAT="cmd/kubelet cmd/kubectl"
+# Just kubectl
+KUBE_BUILD_PLATFORMS=linux/riscv64 make all WHAT="cmd/kubectl"
 ```
 
 ### Build without CGO (no cross-compiler needed)
 
-Some binaries can be built without CGO. This avoids the need for
-`gcc-riscv64-linux-gnu` but disables features that require cgo (e.g.,
-seccomp in kubelet):
+Most Kubernetes binaries are classified as static and build with
+`CGO_ENABLED=0` automatically. Only kubelet uses CGO by default.
+To force kubelet static as well:
 
 ```bash
-CGO_ENABLED=0 GOOS=linux GOARCH=riscv64 go build -o _output/local/bin/linux/riscv64/kubectl ./cmd/kubectl
+KUBE_BUILD_PLATFORMS=linux/riscv64 KUBE_STATIC_OVERRIDES=kubelet \
+  make all WHAT="cmd/kubelet"
 ```
 
 ### Output location

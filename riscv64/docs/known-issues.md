@@ -65,10 +65,30 @@ For containerd v1.x:
 
 ## kubelet CGO and seccomp
 
-When kubelet is built with `CGO_ENABLED=0`, seccomp support is disabled.
-This means seccomp profiles in pod security contexts will not be enforced.
-For production clusters, build kubelet with CGO enabled using the
-`riscv64-linux-gnu-gcc` cross-compiler.
+When kubelet is built with `CGO_ENABLED=0` (or via `KUBE_STATIC_OVERRIDES=kubelet`),
+seccomp support is disabled. This means seccomp profiles in pod security contexts
+will not be enforced. For production clusters, build kubelet with CGO enabled using
+the `riscv64-linux-gnu-gcc` cross-compiler and a full glibc sysroot.
+
+## `make cross` ignores WHAT
+
+The `make cross` target always builds all server, node, client, and test targets
+for all supported platforms. The `WHAT` variable is ignored. Use `make all` with
+`KUBE_BUILD_PLATFORMS=linux/riscv64` to build specific binaries:
+
+```bash
+KUBE_BUILD_PLATFORMS=linux/riscv64 make all WHAT="cmd/kubectl cmd/kubeadm"
+```
+
+## Fedora: Missing riscv64 glibc Sysroot
+
+Fedora's `gcc-riscv64-linux-gnu` package is a bare cross-compiler without glibc
+headers. CGO-enabled builds (kubelet) fail with `pthread.h: No such file or
+directory`. Workarounds:
+
+1. Build kubelet statically: `KUBE_STATIC_OVERRIDES=kubelet`
+2. Use the dockerized kube-cross build method (Method 3 in the build guide)
+3. Use Debian/Ubuntu, which ships `libc6-dev-riscv64-cross` with full headers
 
 ## No Official Release Artifacts
 

@@ -26,7 +26,16 @@ echo ""
 
 export KUBE_BUILD_PLATFORMS=linux/riscv64
 
-make cross WHAT="${WHAT}"
+# Use 'make all' instead of 'make cross' because 'make cross' ignores WHAT
+# and builds all server/node/client targets. 'make all' respects WHAT.
+#
+# KUBE_STATIC_OVERRIDES=kubelet forces kubelet to build without CGO, which
+# avoids the need for a full riscv64 glibc sysroot. This disables seccomp
+# support. For CGO-enabled kubelet, ensure libc6-dev-riscv64-cross (Debian)
+# or equivalent sysroot is installed, then unset KUBE_STATIC_OVERRIDES.
+export KUBE_STATIC_OVERRIDES="${KUBE_STATIC_OVERRIDES:-kubelet}"
+
+make all WHAT="${WHAT}"
 
 echo ""
 echo "Build complete. Binaries at:"

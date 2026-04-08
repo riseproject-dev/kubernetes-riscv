@@ -116,6 +116,12 @@ As Tier 3 maintainers, we commit to:
   about the platform's status
 - Providing riscv64 hardware and CI infrastructure access via RISE Project
   GitHub runners
+- Maintaining a **draft PR against kubernetes/kubernetes** containing the
+  riscv64 build system patches, rebased onto each stable release. This
+  serves as a public integration branch that anyone can check out to build
+  and test Kubernetes on riscv64 without maintaining their own patch set.
+  The draft PR also provides a natural venue for community review and
+  feedback on the changes proposed for Tier 2 promotion.
 
 Per the policy, Tier 3 does not create obligations for the Kubernetes project.
 Bug reports or feature requests specific to riscv64 may be closed without
@@ -193,7 +199,13 @@ changes follow the exact pattern established by s390x and ppc64le:
   `cluster/gce/gci/configure.sh`, `cluster/gce/gci/configure-helper.sh` --
   Architecture detection in cluster scripts
 
-PR: (link to upstream PR when submitted)
+Draft PR: (link to upstream draft PR when submitted)
+
+The draft PR will be kept open and rebased onto each Kubernetes stable
+release for the duration of Tier 3. This gives community members a
+single branch to check out for building and testing riscv64, and
+provides a review surface for the changes that would be merged as part
+of a Tier 2 promotion.
 
 ### Dependency Image Strategy
 
@@ -241,7 +253,9 @@ release cycles at its current tier without major issues before promotion.
 
 A Tier 2 promotion proposal would be filed as a separate issue in
 kubernetes/sig-release after at least two full release cycles at Tier 3,
-with SIG Testing acknowledgement of proposed CI coverage.
+with SIG Testing acknowledgement of proposed CI coverage. The draft PR
+maintained during the Tier 3 period would be promoted from draft to a
+full PR at that time.
 
 ## References
 

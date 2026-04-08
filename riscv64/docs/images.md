@@ -5,12 +5,21 @@ This guide covers building Kubernetes component container images for
 
 ## Prerequisites
 
-- Docker with buildx plugin
+- podman with podman-docker (recommended), or Docker with buildx plugin
 - QEMU user-static for cross-architecture builds (if building on amd64):
   ```bash
-  docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+  podman run --rm --privileged multiarch/qemu-user-static --reset -p yes
   ```
 - Kubernetes source tree with riscv64 binaries already built (see [building.md](building.md))
+
+Install podman:
+```bash
+# Debian/Ubuntu
+sudo apt-get install podman podman-docker
+
+# Fedora
+sudo dnf install podman podman-docker
+```
 
 ## Dependency Images
 

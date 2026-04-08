@@ -47,6 +47,8 @@ file _output/local/bin/linux/riscv64/kubelet
 
 - [Building Binaries](docs/building.md) -- Native and cross-compilation methods
 - [Building Container Images](docs/images.md) -- Component and dependency images
+- [Build and Package All Components](docs/packaging.md) -- End-to-end guide for producing all Tier 3 artifacts
+- [QEMU Testing Environment](docs/qemu-testing.md) -- Testing with QEMU user-mode and system-mode
 - [Cluster Setup](docs/cluster-setup.md) -- kubeadm-based cluster on Debian Trixie
 - [Dependency Status](docs/dependencies.md) -- Ecosystem component matrix
 - [Known Issues](docs/known-issues.md) -- Limitations and workarounds

@@ -53,14 +53,16 @@ EOF
 sudo sysctl --system
 ```
 
-## Install Container Runtime
+## Install Container Runtime and Tools
 
-containerd provides official riscv64 binaries.
+containerd provides official riscv64 binaries. podman is used for image
+management (`pull`, `tag`, `push`). The `podman-docker` package provides
+`docker` and `ctr` CLI compatibility.
 
 ```bash
-# Install containerd from Debian repos
+# Install containerd and podman from Debian repos
 sudo apt-get update
-sudo apt-get install -y containerd
+sudo apt-get install -y containerd podman podman-docker
 
 # Generate default config
 sudo mkdir -p /etc/containerd

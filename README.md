@@ -1,100 +1,141 @@
-# Kubernetes (K8s)
+# Kubernetes for RISC-V (riscv64)
 
-[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/569/badge)](https://bestpractices.coreinfrastructure.org/projects/569) [![Go Report Card](https://goreportcard.com/badge/github.com/kubernetes/kubernetes)](https://goreportcard.com/report/github.com/kubernetes/kubernetes) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/kubernetes/kubernetes?sort=semver)
+Community-maintained build of [Kubernetes](https://github.com/kubernetes/kubernetes)
+for `linux/riscv64`, targeting [Debian Trixie (13)](https://www.debian.org/releases/trixie/).
 
-<img src="https://github.com/kubernetes/kubernetes/raw/master/logo/logo.png" width="100">
+**This is NOT an official Kubernetes release.** These are community builds
+maintained by the [RISE Project](https://riseproject.dev) with no guarantees
+from the Kubernetes project regarding security, availability, or compatibility.
 
-----
+## What This Repository Provides
 
-Kubernetes, also known as K8s, is an open source system for managing [containerized applications]
-across multiple hosts. It provides basic mechanisms for the deployment, maintenance,
-and scaling of applications.
+This repository contains the upstream Kubernetes source tree plus minimal
+patches that add `linux/riscv64` to the build system, along with the
+supporting infrastructure needed to produce a fully functional Kubernetes
+cluster on RISC-V hardware:
 
-Kubernetes builds upon a decade and a half of experience at Google running
-production workloads at scale using a system called [Borg],
-combined with best-of-breed ideas and practices from the community.
+- **Build system patches** -- Add riscv64 to platform lists, architecture
+  detection, and the pause image Makefile (~50 lines across 8 files)
+- **Dependency images** -- Dockerfiles for go-runner, distroless-iptables,
+  and setcap base images built on Debian Trixie
+- **Ecosystem images** -- Dockerfiles for etcd, CoreDNS, and Flannel
+- **CI workflow** -- GitHub Actions workflow using native RISC-V runners
+- **Documentation** -- Complete build, packaging, testing, and deployment guides
 
-Kubernetes is hosted by the Cloud Native Computing Foundation ([CNCF]).
-If your company wants to help shape the evolution of
-technologies that are container-packaged, dynamically scheduled,
-and microservices-oriented, consider joining the CNCF.
-For details about who's involved and how Kubernetes plays a role,
-read the CNCF [announcement].
+## Status
 
-----
+| Component | Status | Artifact |
+|-----------|--------|----------|
+| kube-apiserver | Builds from source | `ghcr.io/riseproject-dev/kube-apiserver` |
+| kube-controller-manager | Builds from source | `ghcr.io/riseproject-dev/kube-controller-manager` |
+| kube-scheduler | Builds from source | `ghcr.io/riseproject-dev/kube-scheduler` |
+| kube-proxy | Builds from source | `ghcr.io/riseproject-dev/kube-proxy` |
+| kubelet | Builds from source | Binary release |
+| kubeadm | Builds from source | Binary release |
+| kubectl | Builds from source | Binary release |
+| pause | Builds from source | `ghcr.io/riseproject-dev/pause` |
+| etcd | Builds (unsupported arch flag) | `ghcr.io/riseproject-dev/etcd` |
+| CoreDNS | Builds from source | `ghcr.io/riseproject-dev/coredns` |
+| Flannel | Builds from source | `ghcr.io/riseproject-dev/flannel` |
+| containerd | Official riscv64 binaries | upstream |
+| runc / crun | Official riscv64 binaries | upstream |
+| CNI plugins | Official riscv64 binaries | upstream |
 
-## To start using K8s
+## Quick Start
 
-See our documentation on [kubernetes.io].
+Build Kubernetes binaries for riscv64:
 
-Take a free course on [Scalable Microservices with Kubernetes].
+```bash
+# Cross-compile from amd64/arm64
+KUBE_BUILD_PLATFORMS=linux/riscv64 make all \
+  WHAT="cmd/kubelet cmd/kubeadm cmd/kubectl \
+        cmd/kube-apiserver cmd/kube-controller-manager \
+        cmd/kube-scheduler cmd/kube-proxy"
 
-To use Kubernetes code as a library in other applications, see the [list of published components](https://git.k8s.io/kubernetes/staging/README.md).
-Use of the `k8s.io/kubernetes` module or `k8s.io/kubernetes/...` packages as libraries is not supported.
+# Verify
+file _output/local/bin/linux/riscv64/kubelet
+# ELF 64-bit LSB executable, UCB RISC-V, ...
+```
 
-## To start developing K8s
+## Documentation
 
-The [community repository] hosts all information about
-building Kubernetes from source, how to contribute code
-and documentation, who to contact about what, etc.
+All guides are in [`riscv64/docs/`](riscv64/docs/):
 
-If you want to build Kubernetes right away there are two options:
+| Guide | Description |
+|-------|-------------|
+| [Building Binaries](riscv64/docs/building.md) | Native and cross-compilation methods |
+| [Building Container Images](riscv64/docs/images.md) | Component and dependency images |
+| [Build and Package All Components](riscv64/docs/packaging.md) | End-to-end guide for all Tier 3 artifacts |
+| [QEMU Testing Environment](riscv64/docs/qemu-testing.md) | Testing with QEMU user-mode and system-mode |
+| [Cluster Setup](riscv64/docs/cluster-setup.md) | kubeadm-based cluster on Debian Trixie |
+| [Dependency Status](riscv64/docs/dependencies.md) | Ecosystem component matrix |
+| [Known Issues](riscv64/docs/known-issues.md) | Limitations and workarounds |
 
-##### You have a working [Go environment].
+## Repository Structure
 
 ```
-git clone https://github.com/kubernetes/kubernetes
-cd kubernetes
-make
+.github/workflows/    CI workflow for native riscv64 builds
+riscv64/
+  docs/               Documentation
+  images/             Dockerfiles for K8s dependency images
+    go-runner/          Base image for static binaries
+    setcap/             Capabilities helper image
+    distroless-iptables/  kube-proxy base image
+    kube-cross/         Cross-compilation environment
+  ecosystem/          Dockerfiles for ecosystem components
+    etcd/               Key-value store
+    coredns/            Cluster DNS
+    flannel/            CNI network plugin
+  scripts/            Build and setup automation
+  proposal/           Tier 3 proposal for SIG Release
 ```
 
-##### You have a working [Docker environment].
+All other files in this repository are the unmodified Kubernetes source tree.
 
-```
-git clone https://github.com/kubernetes/kubernetes
-cd kubernetes
-make quick-release
-```
+## Tier 3 Platform Support
 
-For the full story, head over to the [developer's documentation].
+This project targets [Tier 3 (Community Supported)](https://github.com/kubernetes/sig-release/blob/master/release-engineering/platforms/README.md)
+status for `linux/riscv64` in the Kubernetes project. Tier 3 requires:
 
-## Support
+1. A documented, publicly available build process (this repository)
+2. No official builds or CI infrastructure from the Kubernetes project
+3. Community maintainers identified (RISE Project)
 
-If you need support, start with the [troubleshooting guide],
-and work your way through the process that we've outlined.
+See the [Tier 3 proposal](riscv64/proposal/tier3-proposal.md) for details.
 
-That said, if you have questions, reach out to us
-[one way or another][communication].
+## Prerequisites
 
-[announcement]: https://cncf.io/news/announcement/2015/07/new-cloud-native-computing-foundation-drive-alignment-among-container
-[Borg]: https://research.google.com/pubs/pub43438.html?authuser=1
-[CNCF]: https://www.cncf.io/about
-[communication]: https://git.k8s.io/community/communication
-[community repository]: https://git.k8s.io/community
-[containerized applications]: https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/
-[developer's documentation]: https://git.k8s.io/community/contributors/devel#readme
-[Docker environment]: https://docs.docker.com/engine
-[Go environment]: https://go.dev/doc/install
-[kubernetes.io]: https://kubernetes.io
-[Scalable Microservices with Kubernetes]: https://www.udacity.com/course/scalable-microservices-with-kubernetes--ud615
-[troubleshooting guide]: https://kubernetes.io/docs/tasks/debug/
+- Go 1.26.2+ (or matching the target Kubernetes release)
+- podman with podman-docker (for container image builds)
+- For cross-compilation: `gcc-riscv64-linux-gnu` and `libc6-dev-riscv64-cross`
+- For native builds: RISC-V hardware running Debian Trixie
 
-## Community Meetings 
+## Maintenance Policy
 
-The [Calendar](https://www.kubernetes.dev/resources/calendar/) has the list of all the meetings in the Kubernetes community in a single location.
+Maintained by the [RISE Project](https://riseproject.dev) as part of RISC-V
+enablement in upstream open source software.
 
-## Adopters
+- **Tracked versions**: Current Kubernetes stable release
+- **Update cadence**: Monthly, following upstream releases
+- **Support**: Community best-effort via GitHub issues
+- **No SLA**: These are community builds, not official Kubernetes releases
+- **Architecture**: `linux/riscv64` only
+- **Base OS**: Debian Trixie (13) for all container images
 
-The [User Case Studies](https://kubernetes.io/case-studies/) website has real-world use cases of organizations across industries that are deploying/migrating to Kubernetes.
+## Upstream Kubernetes
 
-## Governance 
+This repository is a fork of [kubernetes/kubernetes](https://github.com/kubernetes/kubernetes).
+The upstream README, documentation, and contribution guides apply to the
+Kubernetes project itself. For upstream Kubernetes information, see
+[kubernetes.io](https://kubernetes.io).
 
-Kubernetes project is governed by a framework of principles, values, policies and processes to help our community and constituents towards our shared goals.
+## Related Work
 
-The [Kubernetes Community](https://github.com/kubernetes/community/blob/master/governance.md) is the launching point for learning about how we organize ourselves.
+- [kubernetes/kubernetes#132836](https://github.com/kubernetes/kubernetes/issues/132836) -- Upstream RISC-V tracking issue
+- [kubernetes-riscv](https://github.com/alitariq4589/kubernetes-riscv) -- Cloud-V build scripts
+- [CARV-ICS-FORTH/kubernetes-riscv64](https://github.com/CARV-ICS-FORTH/kubernetes-riscv64) -- K3s RISC-V port
+- [RISE Project](https://riseproject.dev) -- RISC-V Software Ecosystem
 
-The [Kubernetes Steering community repo](https://github.com/kubernetes/steering) is used by the Kubernetes Steering Committee, which oversees governance of the Kubernetes project.
+## License
 
-## Roadmap 
-
-The [Kubernetes Enhancements repo](https://github.com/kubernetes/enhancements) provides information about Kubernetes releases, as well as feature tracking and backlogs.
+[Apache License 2.0](LICENSE), same as the Kubernetes project.

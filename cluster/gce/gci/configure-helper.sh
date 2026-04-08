@@ -3371,9 +3371,12 @@ function detect_host_info() {
     aHOST_arch64*|aarch64*|arm64*)
       HOST_ARCH="arm64"
       ;;
+    riscv64*)
+      HOST_ARCH="riscv64"
+      ;;
     *)
       echo "Unknown, unsupported architecture (${HOST_ARCH})." >&2
-      echo "Supported architecture(s): amd64 and arm64." >&2
+      echo "Supported architecture(s): amd64, arm64 and riscv64." >&2
       echo "Bailing out." >&2
       exit 2
       ;;

@@ -18,7 +18,6 @@ package etcd
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -493,14 +492,12 @@ func GetEtcdStorageDataForNamespaceServedAt(namespace string, v string, isEmulat
 		gvr("admissionregistration.k8s.io", "v1beta1", "mutatingadmissionpolicies"): {
 			Stub:              `{"metadata":{"name":"map1b1"},"spec":{"paramKind":{"apiVersion":"test.example.com/v1","kind":"Example"},"matchConstraints":{"resourceRules": [{"resourceNames": ["fakeName"], "apiGroups":["apps"],"apiVersions":["v1"],"operations":["CREATE", "UPDATE"], "resources":["deployments"]}]},"reinvocationPolicy": "IfNeeded","mutations":[{"applyConfiguration": {"expression":"Object{metadata: Object.metadata{labels: {'example':'true'}}}"}, "patchType":"ApplyConfiguration"}]}}`,
 			ExpectedEtcdPath:  "/registry/mutatingadmissionpolicies/map1b1",
-			ExpectedGVK:       gvkP("admissionregistration.k8s.io", "v1beta1", "MutatingAdmissionPolicy"),
 			IntroducedVersion: "1.34",
 			RemovedVersion:    "1.40",
 		},
 		gvr("admissionregistration.k8s.io", "v1beta1", "mutatingadmissionpolicybindings"): {
 			Stub:              `{"metadata":{"name":"mpb1b1"},"spec":{"policyName":"replicalimit-policy.example.com","paramRef":{"name":"replica-limit-test.example.com", "parameterNotFoundAction": "Allow"}}}`,
 			ExpectedEtcdPath:  "/registry/mutatingadmissionpolicybindings/mpb1b1",
-			ExpectedGVK:       gvkP("admissionregistration.k8s.io", "v1beta1", "MutatingAdmissionPolicyBinding"),
 			IntroducedVersion: "1.34",
 			RemovedVersion:    "1.40",
 		},
@@ -771,17 +768,16 @@ func GetEtcdStorageDataForNamespaceServedAt(namespace string, v string, isEmulat
 	}
 
 	if isEmulation {
-		fullEtcdStorageData := maps.Clone(etcdStorageData)
-
 		for key := range etcdStorageData {
 			if strings.Contains(key.Version, "alpha") {
 				delete(etcdStorageData, key)
 			}
 		}
-
-		// match the resource to the correct storage version for emulated version
+	}
+	// match the resource to the correct storage version for emulated version
+	if isEmulation {
 		for key, data := range etcdStorageData {
-			storageVersion := storageVersionAtEmulationVersion(key, data.ExpectedGVK, v, fullEtcdStorageData)
+			storageVersion := storageVersionAtEmulationVersion(key, data.ExpectedGVK, v, etcdStorageData)
 			if storageVersion == "" {
 				continue
 			}

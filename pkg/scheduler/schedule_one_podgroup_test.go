@@ -177,7 +177,7 @@ func TestPodGroupInfoForPod(t *testing.T) {
 
 			q := internalqueue.NewTestQueue(ctx, nil)
 			for _, pInfo := range tt.queuePods {
-				err := q.AddUnschedulableIfNotPresent(logger, pInfo, 0)
+				err := q.AddUnschedulableIfNotPresent(logger, pInfo, 0, "")
 				if err != nil {
 					t.Fatalf("Failed to add unschedulable pod: %v", err)
 				}

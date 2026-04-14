@@ -46,7 +46,6 @@ type activeQueuer interface {
 	movePodToInFlight(pInfo *framework.QueuedPodInfo) error
 	listInFlightEvents() []interface{}
 	listInFlightPods() []*v1.Pod
-	// clusterEventsForPod collects cluster events recorded while pInfo.Pod was in flight.
 	clusterEventsForPod(logger klog.Logger, pInfo *framework.QueuedPodInfo) ([]*clusterEvent, error)
 	addEventsIfPodInFlight(oldPod, newPod *v1.Pod, events []fwk.ClusterEvent) bool
 	addEventIfAnyInFlight(oldObj, newObj interface{}, event fwk.ClusterEvent) bool
@@ -397,7 +396,7 @@ func (aq *activeQueue) listInFlightPods() []*v1.Pod {
 	return pods
 }
 
-// clusterEventsForPod gets all cluster events that have happened while pInfo.Pod was in flight.
+// clusterEventsForPod gets all cluster events that have happened during pod for pInfo is being scheduled.
 func (aq *activeQueue) clusterEventsForPod(logger klog.Logger, pInfo *framework.QueuedPodInfo) ([]*clusterEvent, error) {
 	aq.lock.RLock()
 	defer aq.lock.RUnlock()
@@ -405,7 +404,7 @@ func (aq *activeQueue) clusterEventsForPod(logger klog.Logger, pInfo *framework.
 
 	// AddUnschedulableIfNotPresent is called with the Pod at the end of scheduling or binding.
 	// So, given pInfo should have been Pop()ed before,
-	// we can assume pInfo.Pod.UID must be recorded in inFlightPods and thus inFlightEvents.
+	// we can assume pInfo must be recorded in inFlightPods and thus inFlightEvents.
 	inFlightPod, ok := aq.inFlightPods[pInfo.Pod.UID]
 	if !ok {
 		return nil, fmt.Errorf("in flight Pod isn't found in the scheduling queue. If you see this error log, it's likely a bug in the scheduler")

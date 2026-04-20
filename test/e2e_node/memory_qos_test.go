@@ -587,6 +587,9 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 		ginkgo.AfterEach(func(ctx context.Context) { restoreConfig(ctx) })
 
 		ginkgo.It("should reset memory protection to 0 when MemoryQoS is disabled", func(ctx context.Context) {
+			// See https://github.com/kubernetes/kubernetes/pull/138430 for details
+			ginkgo.Skip("skipping test until MemoryQoS rollback is resolved")
+
 			configureMemoryQoSWithPolicy(ctx, 0.9, kubeletconfig.TieredReservationMemoryReservationPolicy)
 
 			pod := memqosMakePod("memqos-rollback", f.Namespace.Name,

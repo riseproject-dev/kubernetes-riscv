@@ -1,0 +1,111 @@
+# Run Kubernetes unit tests natively on riscv64 hardware
+#
+# Validates that the full test suite passes on linux/riscv64.
+# Results are uploaded as artifacts (JUnit XML + log).
+
+name: Test riscv64
+
+on:
+  push:
+    branches: [riscv-support]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'go.work'
+      - '.github/workflows/test-riscv64.yml'
+  workflow_dispatch:
+  schedule:
+    # Weekly: Sunday at 04:00 UTC
+    - cron: '0 4 * * 0'
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-24.04-riscv
+    timeout-minutes: 360
+    steps:
+      - name: Clean workspace
+        run: sudo rm -rf _output/ || true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        run: |
+          GO_VERSION=$(cat .go-version)
+          curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-riscv64.tar.gz" \
+            | sudo tar -C /usr/local -xz
+          echo "/usr/local/go/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Go
+        run: |
+          go version
+          go env GOARCH
+
+      - name: Run unit tests
+        run: |
+          make test \
+            KUBE_TIMEOUT=300s \
+            GOFLAGS="-count=1" \
+            2>&1 | tee test-output.log
+        continue-on-error: true
+
+      - name: Summarize results
+        if: always()
+        run: |
+          echo "## riscv64 Unit Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Strip ANSI color codes before counting
+          sed 's/\x1b\[[0-9;]*m//g' test-output.log > test-output-plain.log
+
+          passed=$(grep -c "^✓" test-output-plain.log 2>/dev/null || echo 0)
+          failed=$(grep -c "^✗" test-output-plain.log 2>/dev/null || echo 0)
+          empty=$(grep -c "^∅" test-output-plain.log 2>/dev/null || echo 0)
+          total=$((passed + failed + empty))
+
+          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Passed | ${passed} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Failed | ${failed} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Empty  | ${empty} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Total  | ${total} |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${failed}" -gt 0 ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Failed packages" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep "^✗" test-output-plain.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: riscv64-unit-test-log
+          path: test-output.log
+          retention-days: 90
+
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: riscv64-unit-test-junit
+          path: _artifacts/junit*.xml
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Check for failures
+        run: |
+          sed 's/\x1b\[[0-9;]*m//g' test-output.log > test-output-plain.log
+          failed=$(grep -c "^✗" test-output-plain.log 2>/dev/null || echo 0)
+          if [ "${failed}" -gt 0 ]; then
+            echo "::error::${failed} test package(s) failed on riscv64"
+            exit 1
+          fi

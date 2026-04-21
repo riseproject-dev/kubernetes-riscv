@@ -1,0 +1,416 @@
+# Build and publish Kubernetes artifacts for linux/riscv64
+#
+# Runs natively on RISC-V hardware via RISE Project GitHub runners.
+# See: https://github.com/riseproject-dev/riscv-runner-images
+#
+# Produces:
+#   - Kubernetes binaries (kubelet, kubeadm, kubectl, kube-apiserver, etc.)
+#   - Kubernetes component images (kube-apiserver, kube-proxy, etc.)
+#   - Dependency base images (go-runner, distroless-iptables, setcap)
+#   - Ecosystem images (etcd, CoreDNS, Flannel)
+#   - Binary tarballs for distribution
+
+name: Build riscv64
+
+on:
+  push:
+    branches: [riscv-support]
+    paths:
+      - 'riscv64/**'
+      - '.github/workflows/build-riscv64.yml'
+  workflow_dispatch:
+    inputs:
+      k8s_version:
+        description: 'Kubernetes version (e.g. v1.32.0)'
+        required: false
+      publish:
+        description: 'Push images and create release'
+        type: boolean
+        default: false
+  schedule:
+    # Monthly build: first Monday at 06:00 UTC
+    - cron: '0 6 1-7 * 1'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/riseproject-dev
+  ETCD_VERSION: v3.5.21
+  COREDNS_VERSION: v1.12.1
+  FLANNEL_VERSION: v0.28.0
+  PAUSE_TAG: "3.10.2"
+
+jobs:
+  build-binaries:
+    name: Build binaries
+    runs-on: ubuntu-24.04-riscv
+    timeout-minutes: 180
+    steps:
+      - name: Clean workspace
+        run: sudo rm -rf _output/ || true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+          fetch-tags: true
+
+      - name: Install Go
+        run: |
+          GO_VERSION=$(cat .go-version)
+          echo "GO_VERSION=${GO_VERSION}" >> "$GITHUB_ENV"
+          curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-riscv64.tar.gz" \
+            | sudo tar -C /usr/local -xz
+          echo "/usr/local/go/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Go
+        run: |
+          go version
+          go env GOARCH  # should print riscv64
+
+      - name: Build all binaries
+        run: |
+          K8S_VERSION="${{ inputs.k8s_version || '' }}"
+          if [ -z "${K8S_VERSION}" ]; then
+            K8S_VERSION=$(git describe --tags --abbrev=0)
+          fi
+          echo "K8S_VERSION=${K8S_VERSION}" >> "$GITHUB_ENV"
+
+          # Native build -- no cross-compilation needed
+          make all \
+            WHAT="cmd/kubelet cmd/kubeadm cmd/kubectl \
+                  cmd/kube-apiserver cmd/kube-controller-manager \
+                  cmd/kube-scheduler cmd/kube-proxy \
+                  staging/src/k8s.io/component-base/logs/kube-log-runner"
+
+      - name: Verify binaries
+        run: |
+          for bin in kubectl kubeadm kubelet kube-apiserver \
+                     kube-controller-manager kube-scheduler kube-proxy; do
+            echo -n "${bin}: "
+            file "_output/local/bin/linux/riscv64/${bin}" | grep -q "RISC-V" && echo "OK" || echo "FAIL"
+          done
+          # Functional check
+          _output/local/bin/linux/riscv64/kubectl version --client
+          _output/local/bin/linux/riscv64/kubeadm version
+          _output/local/bin/linux/riscv64/kubelet --version
+
+      - name: Package binary tarballs
+        run: |
+          mkdir -p _dist
+
+          tar czf "_dist/kubernetes-server-linux-riscv64-${K8S_VERSION}.tar.gz" \
+            -C _output/local/bin/linux/riscv64 \
+            kube-apiserver kube-controller-manager kube-scheduler kube-proxy kubelet
+
+          tar czf "_dist/kubernetes-node-linux-riscv64-${K8S_VERSION}.tar.gz" \
+            -C _output/local/bin/linux/riscv64 \
+            kubelet kubeadm kubectl
+
+          tar czf "_dist/kubernetes-client-linux-riscv64-${K8S_VERSION}.tar.gz" \
+            -C _output/local/bin/linux/riscv64 \
+            kubectl
+
+          ls -lh _dist/
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubernetes-riscv64-binaries
+          path: _output/local/bin/linux/riscv64/
+          retention-days: 30
+
+      - name: Upload tarballs
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubernetes-riscv64-tarballs
+          path: _dist/
+          retention-days: 30
+
+  build-images:
+    name: Build images
+    runs-on: ubuntu-24.04-riscv
+    timeout-minutes: 180
+    needs: build-binaries
+    steps:
+      - name: Clean workspace
+        run: sudo rm -rf _output/ || true
+
+      - name: Set up rootful podman as docker
+        run: |
+          # Fix overlay-on-overlayfs: if podman storage is broken, reset and
+          # reconfigure with fuse-overlayfs (preferred) or vfs (fallback).
+          if ! sudo podman info &>/dev/null; then
+            sudo podman system reset --force 2>/dev/null || true
+            sudo rm -rf /var/lib/containers/storage 2>/dev/null || true
+            sudo mkdir -p /etc/containers
+            if command -v fuse-overlayfs &>/dev/null; then
+              printf '[storage]\ndriver = "overlay"\n\n[storage.options.overlay]\nmount_program = "/usr/bin/fuse-overlayfs"\n' \
+                | sudo tee /etc/containers/storage.conf > /dev/null
+            else
+              printf '[storage]\ndriver = "vfs"\n' \
+                | sudo tee /etc/containers/storage.conf > /dev/null
+            fi
+          fi
+          printf '#!/bin/bash\nexec sudo /usr/bin/podman "$@"\n' | sudo tee /usr/local/bin/docker > /dev/null
+          sudo chmod +x /usr/local/bin/docker
+          docker info > /dev/null
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+          fetch-tags: true
+
+      - name: Install Go
+        run: |
+          GO_VERSION=$(cat .go-version)
+          echo "GO_VERSION=${GO_VERSION}" >> "$GITHUB_ENV"
+          curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-riscv64.tar.gz" \
+            | sudo tar -C /usr/local -xz
+          echo "/usr/local/go/bin" >> "$GITHUB_PATH"
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: kubernetes-riscv64-binaries
+          path: _output/local/bin/linux/riscv64/
+
+      - name: Restore binary permissions
+        run: chmod +x _output/local/bin/linux/riscv64/*
+
+      - name: Determine version
+        run: |
+          K8S_VERSION="${{ inputs.k8s_version || '' }}"
+          if [ -z "${K8S_VERSION}" ]; then
+            K8S_VERSION=$(git describe --tags --abbrev=0)
+          fi
+          echo "K8S_VERSION=${K8S_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build dependency images
+        run: |
+          GO_RUNNER_TAG="v2.4.0-go${GO_VERSION}-trixie.0"
+          IPTABLES_TAG="v0.9.0-trixie.0"
+          SETCAP_TAG="trixie-v1.0.0"
+
+          KUBE_CROSS_TAG="v1.36.0-go${GO_VERSION}-trixie.0"
+
+          echo "GO_RUNNER_TAG=${GO_RUNNER_TAG}" >> "$GITHUB_ENV"
+          echo "IPTABLES_TAG=${IPTABLES_TAG}" >> "$GITHUB_ENV"
+          echo "SETCAP_TAG=${SETCAP_TAG}" >> "$GITHUB_ENV"
+          echo "KUBE_CROSS_TAG=${KUBE_CROSS_TAG}" >> "$GITHUB_ENV"
+
+          # kube-cross
+          sudo podman build \
+            --build-arg GO_VERSION="${GO_VERSION}" \
+            -t "${REGISTRY}/kube-cross:${KUBE_CROSS_TAG}" \
+            riscv64/images/kube-cross/
+
+          # go-runner
+          sudo podman build \
+            --build-arg GO_VERSION="${GO_VERSION}" \
+            -t "${REGISTRY}/go-runner:${GO_RUNNER_TAG}" \
+            riscv64/images/go-runner/
+
+          # setcap
+          sudo podman build \
+            -t "${REGISTRY}/setcap:${SETCAP_TAG}" \
+            riscv64/images/setcap/
+
+          # distroless-iptables
+          sudo podman build \
+            --build-arg GORUNNERIMAGE="${REGISTRY}/go-runner:${GO_RUNNER_TAG}" \
+            -t "${REGISTRY}/distroless-iptables:${IPTABLES_TAG}" \
+            riscv64/images/distroless-iptables/
+
+      - name: Push dependency images
+        run: |
+          # BuildKit pulls base images from the registry rather than the
+          # local Docker store, so dependency images must be pushed before
+          # building server images.
+          sudo podman push "${REGISTRY}/kube-cross:${KUBE_CROSS_TAG}"
+          sudo podman push "${REGISTRY}/go-runner:${GO_RUNNER_TAG}"
+          sudo podman push "${REGISTRY}/setcap:${SETCAP_TAG}"
+          sudo podman push "${REGISTRY}/distroless-iptables:${IPTABLES_TAG}"
+
+      - name: Build Kubernetes component images
+        run: |
+          export KUBE_BUILD_PLATFORMS=linux/riscv64
+          export KUBE_DOCKER_REGISTRY="${REGISTRY}"
+          export KUBE_BASE_IMAGE_REGISTRY="${REGISTRY}"
+          export KUBE_GORUNNER_IMAGE="${REGISTRY}/go-runner:${GO_RUNNER_TAG}"
+          export KUBE_PROXY_BASE_IMAGE="${REGISTRY}/distroless-iptables:${IPTABLES_TAG}"
+          export KUBE_BUILD_SETCAP_IMAGE="${REGISTRY}/setcap:${SETCAP_TAG}"
+
+          # Set version explicitly — the fork may lack upstream tags
+          export KUBE_GIT_VERSION="${K8S_VERSION}"
+          export KUBE_GIT_TREE_STATE="clean"
+
+          # Stage natively-built binaries where the release scripts expect them.
+          # make release-images normally rebuilds inside kube-cross, but the
+          # RISE runners build natively so we skip the containerized compile.
+          mkdir -p _output/dockerized/bin/linux/riscv64
+          cp _output/local/bin/linux/riscv64/* _output/dockerized/bin/linux/riscv64/
+
+          # Run as root so that docker save (rootful podman) and the
+          # subsequent hard links in the release script share the same UID.
+          sudo -E bash -c '
+            source build/common.sh
+            source build/lib/release.sh
+            kube::build::verify_prereqs
+            kube::release::build_server_images
+          '
+
+      - name: Build pause image
+        run: |
+          cd build/pause
+          REV=$(git describe --contains --always --match='v*')
+          mkdir -p bin
+          gcc -Os -Wall -Werror -static -DVERSION=v${PAUSE_TAG}-${REV} \
+            -o bin/pause-linux-riscv64 linux/pause.c
+          strip bin/pause-linux-riscv64
+          sudo podman build --platform linux/riscv64 \
+            -t "${REGISTRY}/pause:${PAUSE_TAG}-linux-riscv64" \
+            --build-arg BASE=scratch --build-arg ARCH=riscv64 .
+
+      - name: Build ecosystem images
+        run: |
+          # etcd
+          sudo podman build \
+            --build-arg ETCD_VERSION="${ETCD_VERSION}" \
+            --build-arg GO_VERSION="${GO_VERSION}" \
+            -t "${REGISTRY}/etcd:${ETCD_VERSION}-riscv64" \
+            riscv64/ecosystem/etcd/
+
+          # CoreDNS
+          sudo podman build \
+            --build-arg COREDNS_VERSION="${COREDNS_VERSION}" \
+            --build-arg GO_VERSION="${GO_VERSION}" \
+            -t "${REGISTRY}/coredns:${COREDNS_VERSION}-riscv64" \
+            riscv64/ecosystem/coredns/
+
+          # Flannel
+          sudo podman build \
+            --build-arg FLANNEL_VERSION="${FLANNEL_VERSION}" \
+            --build-arg GO_VERSION="${GO_VERSION}" \
+            -t "${REGISTRY}/flannel:${FLANNEL_VERSION}-riscv64" \
+            riscv64/ecosystem/flannel/
+
+      - name: Verify images
+        run: |
+          echo "=== Kubernetes component images ==="
+          for img in kube-apiserver kube-controller-manager kube-scheduler kube-proxy; do
+            echo -n "${img}-riscv64: "
+            sudo podman inspect "${REGISTRY}/${img}-riscv64:${K8S_VERSION}" --format '{{.Architecture}}' 2>/dev/null || echo "MISSING"
+          done
+
+          echo "=== Dependency images ==="
+          for img in "go-runner:${GO_RUNNER_TAG}" \
+                     "distroless-iptables:${IPTABLES_TAG}" \
+                     "setcap:${SETCAP_TAG}" \
+                     "pause:${PAUSE_TAG}-linux-riscv64"; do
+            echo -n "${img}: "
+            sudo podman inspect "${REGISTRY}/${img}" --format '{{.Architecture}}' 2>/dev/null || echo "MISSING"
+          done
+
+          echo "=== Ecosystem images ==="
+          for img in "etcd:${ETCD_VERSION}-riscv64" \
+                     "coredns:${COREDNS_VERSION}-riscv64" \
+                     "flannel:${FLANNEL_VERSION}-riscv64"; do
+            echo -n "${img}: "
+            sudo podman inspect "${REGISTRY}/${img}" --format '{{.Architecture}}' 2>/dev/null || echo "MISSING"
+          done
+
+      - name: Push images
+        if: inputs.publish == true || github.event_name == 'schedule'
+        run: |
+          # Kubernetes components (arch-suffixed per upstream convention)
+          for img in kube-apiserver kube-controller-manager kube-scheduler kube-proxy; do
+            sudo podman push "${REGISTRY}/${img}-riscv64:${K8S_VERSION}"
+          done
+
+          # Pause
+          sudo podman push "${REGISTRY}/pause:${PAUSE_TAG}-linux-riscv64"
+
+          # Dependency images (already pushed before make release-images,
+          # re-push is a no-op but keeps the release gate explicit)
+          sudo podman push "${REGISTRY}/go-runner:${GO_RUNNER_TAG}"
+          sudo podman push "${REGISTRY}/distroless-iptables:${IPTABLES_TAG}"
+          sudo podman push "${REGISTRY}/setcap:${SETCAP_TAG}"
+
+          # Ecosystem
+          sudo podman push "${REGISTRY}/etcd:${ETCD_VERSION}-riscv64"
+          sudo podman push "${REGISTRY}/coredns:${COREDNS_VERSION}-riscv64"
+          sudo podman push "${REGISTRY}/flannel:${FLANNEL_VERSION}-riscv64"
+
+      - name: Log out of GHCR
+        if: always()
+        run: sudo podman logout ghcr.io || true
+
+  release:
+    name: Create release
+    runs-on: ubuntu-24.04
+    needs: [build-binaries, build-images]
+    if: inputs.publish == true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+          fetch-tags: true
+
+      - name: Determine version
+        run: |
+          K8S_VERSION="${{ inputs.k8s_version || '' }}"
+          if [ -z "${K8S_VERSION}" ]; then
+            K8S_VERSION=$(git describe --tags --abbrev=0)
+          fi
+          echo "K8S_VERSION=${K8S_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Download tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: kubernetes-riscv64-tarballs
+          path: _dist/
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${K8S_VERSION}-riscv64" \
+            --title "Kubernetes ${K8S_VERSION} for riscv64" \
+            --notes "Community build of Kubernetes ${K8S_VERSION} for \`linux/riscv64\`.
+
+          **This is NOT an official Kubernetes release.** These are community builds
+          maintained by the [RISE Project](https://riseproject.dev). See the
+          [build guide](https://github.com/riseproject-dev/kubernetes-riscv/tree/riscv-support/riscv64)
+          for details.
+
+          ### Container images
+
+          All images published to \`ghcr.io/riseproject-dev/\`:
+
+          | Image | Tag |
+          |-------|-----|
+          | kube-apiserver-riscv64 | \`${K8S_VERSION}\` |
+          | kube-controller-manager-riscv64 | \`${K8S_VERSION}\` |
+          | kube-scheduler-riscv64 | \`${K8S_VERSION}\` |
+          | kube-proxy-riscv64 | \`${K8S_VERSION}\` |
+          | pause | \`${PAUSE_TAG}-linux-riscv64\` |
+          | etcd | \`${ETCD_VERSION}-riscv64\` |
+          | coredns | \`${COREDNS_VERSION}-riscv64\` |
+          | flannel | \`${FLANNEL_VERSION}-riscv64\` |
+
+          ### Deployment
+
+          See [cluster-setup.md](https://github.com/riseproject-dev/kubernetes-riscv/blob/riscv-support/riscv64/docs/cluster-setup.md)" \
+            _dist/kubernetes-server-linux-riscv64-${K8S_VERSION}.tar.gz \
+            _dist/kubernetes-node-linux-riscv64-${K8S_VERSION}.tar.gz \
+            _dist/kubernetes-client-linux-riscv64-${K8S_VERSION}.tar.gz

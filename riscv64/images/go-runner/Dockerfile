@@ -16,12 +16,12 @@ ARG GO_VERSION=1.26.2
 ARG DISTROLESS_IMAGE=gcr.io/distroless/static-debian13:nonroot
 
 # Stage 1: Build go-runner from source
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-trixie AS builder
 
 ARG TARGETOS=linux
 ARG TARGETARCH=riscv64
 
-COPY go-runner.go /go-runner/
+COPY go.mod go-runner.go /go-runner/
 WORKDIR /go-runner
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \

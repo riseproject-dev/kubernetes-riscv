@@ -17,6 +17,8 @@ ARG BASEIMAGE=debian:trixie-slim
 ARG DISTROLESS_IMAGE=gcr.io/distroless/static-debian13:nonroot
 ARG GORUNNERIMAGE=ghcr.io/riseproject-dev/go-runner:v2.4.0-go1.26.2-trixie.0
 
+FROM ${GORUNNERIMAGE} AS go-runner-src
+
 # Stage 1: Install packages and collect binaries + dependencies
 FROM ${BASEIMAGE} AS builder
 
@@ -76,6 +78,6 @@ RUN mkdir -p /stage/lib/riscv64-linux-gnu && \
 FROM ${DISTROLESS_IMAGE}
 
 COPY --from=builder /stage/ /
-COPY --from=${GORUNNERIMAGE} /usr/local/bin/go-runner /usr/local/bin/go-runner
+COPY --from=go-runner-src /usr/local/bin/go-runner /usr/local/bin/go-runner
 
 ENTRYPOINT ["/usr/local/bin/go-runner"]

@@ -22,7 +22,7 @@ ARG GO_VERSION=1.26.2
 ARG BASEIMAGE=debian:trixie-slim
 
 # Stage 1: Get Go
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm AS go-src
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-trixie AS go-src
 
 # Stage 2: Build environment
 FROM ${BASEIMAGE}

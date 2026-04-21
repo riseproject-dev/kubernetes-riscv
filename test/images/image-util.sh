@@ -34,7 +34,7 @@ source "${KUBE_ROOT}/hack/lib/logging.sh"
 source "${KUBE_ROOT}/hack/lib/util.sh"
 
 # Mapping of go ARCH to actual architectures shipped part of multiarch/qemu-user-static project
-declare -A QEMUARCHS=( ["amd64"]="x86_64" ["arm"]="arm" ["arm64"]="aarch64" ["ppc64le"]="ppc64le" ["s390x"]="s390x" )
+declare -A QEMUARCHS=( ["amd64"]="x86_64" ["arm"]="arm" ["arm64"]="aarch64" ["ppc64le"]="ppc64le" ["s390x"]="s390x" ["riscv64"]="riscv64" )
 
 # NOTE(claudiub): In the test image build jobs, this script is not being run in a git repository,
 # which would cause git log to fail. Instead, we can use the GIT_COMMIT_ID set in cloudbuild.yaml.
